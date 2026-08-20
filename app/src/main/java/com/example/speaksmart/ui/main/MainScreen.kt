@@ -37,17 +37,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -75,6 +81,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.speaksmart.llm.DownloadStatus
+import com.example.speaksmart.llm.ModelDownloader
 import com.example.speaksmart.theme.*
 
 @Composable
@@ -144,6 +152,17 @@ fun MainScreen(
                     .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // Show model download card if model is not loaded yet
+                if (!uiState.isModelLoaded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ModelDownloadCard(
+                        downloadStatus = uiState.downloadStatus,
+                        onStartDownload = { customUrl ->
+                            viewModel.startModelDownload(customUrl)
+                        }
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Microphone button area
@@ -229,7 +248,7 @@ private fun TopBar(
             // Model status indicator
             Icon(
                 imageVector = if (isModelLoaded) Icons.Outlined.CloudQueue else Icons.Outlined.CloudOff,
-                contentDescription = if (isModelLoaded) "LLM model loaded" else "Using built-in analysis",
+                contentDescription = if (isModelLoaded) "Qwen 2.5 LLM loaded" else "Using built-in rule analysis",
                 tint = if (isModelLoaded) SuccessGreen else OnSurfaceVariantDark,
                 modifier = Modifier.size(20.dp)
             )
@@ -240,6 +259,130 @@ private fun TopBar(
                     contentDescription = "Clear session",
                     tint = OnSurfaceVariantDark,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelDownloadCard(
+    downloadStatus: DownloadStatus,
+    onStartDownload: (String?) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceElevatedDark),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PrimaryDark.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = PrimaryDark,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Download Qwen 2.5 (1.5B) Model",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = OnSurfaceDark,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Enable full offline privacy-first AI LLM on phone",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceVariantDark,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (downloadStatus) {
+                is DownloadStatus.Idle -> {
+                    Button(
+                        onClick = { onStartDownload(null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Download Model In-App (~1.1 GB)", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                is DownloadStatus.Downloading -> {
+                    val progressPercent = (downloadStatus.progress * 100).toInt()
+                    val downloadedMB = downloadStatus.downloadedBytes / (1024 * 1024)
+                    val totalMB = if (downloadStatus.totalBytes > 0) downloadStatus.totalBytes / (1024 * 1024) else 0
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Downloading model...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PrimaryDark,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (totalMB > 0) "$downloadedMB MB / $totalMB MB ($progressPercent%)" else "$downloadedMB MB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceVariantDark
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadStatus.progress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = PrimaryDark,
+                            trackColor = PrimaryContainer
+                        )
+                    }
+                }
+                is DownloadStatus.Completed -> {
+                    Text(
+                        text = "✅ Qwen 2.5 Model Downloaded & Ready!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = SuccessGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                is DownloadStatus.Error -> {
+                    Text(
+                        text = "Download Error: ${downloadStatus.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorRed
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { onStartDownload(null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Retry Download")
+                    }
+                }
             }
         }
     }
@@ -263,17 +406,6 @@ private fun MicrophoneButton(
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_scale"
-    )
-
-    // Rotating ring animation
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
     )
 
     val buttonScale by animateFloatAsState(
@@ -422,7 +554,7 @@ private fun StatusText(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Analyzing your speech...",
+                        text = "Analyzing your speech with AI...",
                         style = MaterialTheme.typography.titleMedium,
                         color = CorrectionSectionColor,
                         fontWeight = FontWeight.SemiBold,

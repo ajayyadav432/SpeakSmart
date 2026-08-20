@@ -4,7 +4,9 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.speaksmart.llm.DownloadStatus
 import com.example.speaksmart.llm.LlmInferenceHelper
+import com.example.speaksmart.llm.ModelDownloader
 import com.example.speaksmart.speech.SpeechRecognitionHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,7 @@ data class SpeakSmartUiState(
     val isListening: Boolean = false,
     val isAnalyzing: Boolean = false,
     val isModelLoaded: Boolean = false,
+    val downloadStatus: DownloadStatus = DownloadStatus.Idle,
     val errorMessage: String? = null,
     val rmsLevel: Float = 0f,
     val sessionHistory: List<SessionEntry> = emptyList(),
@@ -38,6 +41,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private val speechHelper = SpeechRecognitionHelper(application)
     private val llmHelper = LlmInferenceHelper(application)
+    private val modelDownloader = ModelDownloader(application)
 
     private val _uiState = MutableStateFlow(SpeakSmartUiState())
     val uiState: StateFlow<SpeakSmartUiState> = _uiState.asStateFlow()
@@ -85,13 +89,35 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // Try to initialize LLM
+        // Observe model download status
+        viewModelScope.launch {
+            modelDownloader.status.collectLatest { status ->
+                _uiState.value = _uiState.value.copy(downloadStatus = status)
+                if (status is DownloadStatus.Completed) {
+                    // Initialize LLM automatically after download completes
+                    initializeLlm()
+                }
+            }
+        }
+
+        // Initial check and load of LLM
+        initializeLlm()
+    }
+
+    private fun initializeLlm() {
         viewModelScope.launch {
             val loaded = llmHelper.initialize()
             _uiState.value = _uiState.value.copy(isModelLoaded = loaded)
             if (!loaded) {
-                Log.i(TAG, "LLM model not available - using built-in analysis")
+                Log.i(TAG, "LLM model not available - using built-in rule analysis until downloaded")
             }
+        }
+    }
+
+    fun startModelDownload(customUrl: String? = null) {
+        viewModelScope.launch {
+            val url = if (!customUrl.isNullOrBlank()) customUrl else ModelDownloader.DEFAULT_MODEL_URL
+            modelDownloader.downloadModel(url)
         }
     }
 
@@ -139,7 +165,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearSession() {
-        _uiState.value = SpeakSmartUiState(isModelLoaded = _uiState.value.isModelLoaded)
+        _uiState.value = SpeakSmartUiState(
+            isModelLoaded = _uiState.value.isModelLoaded,
+            downloadStatus = _uiState.value.downloadStatus
+        )
         speechHelper.resetState()
     }
 
