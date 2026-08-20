@@ -33,9 +33,15 @@ android {
     }
 
     packaging {
-      resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
-      }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
@@ -71,9 +77,15 @@ dependencies {
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-  // Local tests: jUnit, coroutines, Android runner
+  // Local tests: jUnit, coroutines, Robolectric, Mockito, Compose Test
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.robolectric)
+  testImplementation(libs.mockito.core)
+  testImplementation(libs.mockito.kotlin)
+  testImplementation(libs.androidx.test.core)
+  testImplementation(libs.androidx.test.ext.junit)
+  testImplementation(libs.androidx.compose.ui.test.junit4)
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)
