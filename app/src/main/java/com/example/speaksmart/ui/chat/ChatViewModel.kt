@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.speaksmart.data.AiAgentPersona
 import com.example.speaksmart.data.ChatMessage
 import com.example.speaksmart.data.MessageSender
 import com.example.speaksmart.llm.LlmInferenceHelper
@@ -15,31 +16,32 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class ChatUiState(
-    val messages: List<ChatMessage> = emptyList(),
+    val selectedPersona: AiAgentPersona? = null,
+    val messagesPerPersona: Map<String, List<ChatMessage>> = emptyMap(),
     val inputText: String = "",
     val isGenerating: Boolean = false,
     val isListening: Boolean = false,
     val isModelLoaded: Boolean = false,
     val errorMessage: String? = null,
-)
+) {
+    val currentMessages: List<ChatMessage>
+        get() = selectedPersona?.let { persona ->
+            messagesPerPersona[persona.id] ?: listOf(
+                ChatMessage(text = persona.welcomeMessage, sender = MessageSender.AI)
+            )
+        } ?: emptyList()
+}
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "ChatViewModel"
-        
-        val INITIAL_WELCOME_MESSAGE = ChatMessage(
-            text = "Hello! 👋 I'm SpeakSmart AI, your personal English language tutor.\n\nAsk me anything about English grammar, vocabulary, sentence corrections, or practice a conversation with me!",
-            sender = MessageSender.AI
-        )
     }
 
     private val llmHelper = LlmInferenceHelper(application)
     private val speechHelper = SpeechRecognitionHelper(application)
 
-    private val _uiState = MutableStateFlow(
-        ChatUiState(messages = listOf(INITIAL_WELCOME_MESSAGE))
-    )
+    private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
@@ -79,29 +81,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun selectPersona(persona: AiAgentPersona) {
+        val currentMap = _uiState.value.messagesPerPersona.toMutableMap()
+        if (!currentMap.containsKey(persona.id)) {
+            currentMap[persona.id] = listOf(
+                ChatMessage(text = persona.welcomeMessage, sender = MessageSender.AI)
+            )
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedPersona = persona,
+            messagesPerPersona = currentMap,
+            inputText = ""
+        )
+    }
+
+    fun switchPersona() {
+        _uiState.value = _uiState.value.copy(selectedPersona = null, inputText = "")
+    }
+
     fun updateInputText(text: String) {
         _uiState.value = _uiState.value.copy(inputText = text)
     }
 
     fun sendMessage(promptText: String = _uiState.value.inputText) {
+        val persona = _uiState.value.selectedPersona ?: return
         val trimmed = promptText.trim()
         if (trimmed.isBlank() || _uiState.value.isGenerating) return
 
         val userMessage = ChatMessage(text = trimmed, sender = MessageSender.USER)
         val pendingAiMessage = ChatMessage(text = "...", sender = MessageSender.AI, isPending = true)
 
-        val updatedMessages = _uiState.value.messages + userMessage + pendingAiMessage
+        val existingMessages = _uiState.value.currentMessages
+        val updatedMessages = existingMessages + userMessage + pendingAiMessage
+
+        val updatedMap = _uiState.value.messagesPerPersona.toMutableMap()
+        updatedMap[persona.id] = updatedMessages
 
         _uiState.value = _uiState.value.copy(
-            messages = updatedMessages,
+            messagesPerPersona = updatedMap,
             inputText = "",
             isGenerating = true
         )
 
         viewModelScope.launch {
             try {
-                // Build history pairs
-                val history = _uiState.value.messages
+                val history = existingMessages
                     .filter { !it.isPending }
                     .chunked(2)
                     .mapNotNull { pair ->
@@ -110,16 +134,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         } else null
                     }
 
-                val aiResponseText = llmHelper.generateChatResponse(trimmed, history)
+                val aiResponseText = llmHelper.generateChatResponse(trimmed, history, persona)
                 val finalAiMessage = ChatMessage(id = pendingAiMessage.id, text = aiResponseText, sender = MessageSender.AI)
 
-                // Replace pending message with final AI response
-                val finalMessages = _uiState.value.messages.map { msg ->
+                val activeList = _uiState.value.messagesPerPersona[persona.id] ?: emptyList()
+                val finalMessages = activeList.map { msg ->
                     if (msg.id == pendingAiMessage.id) finalAiMessage else msg
                 }
 
+                val finalMap = _uiState.value.messagesPerPersona.toMutableMap()
+                finalMap[persona.id] = finalMessages
+
                 _uiState.value = _uiState.value.copy(
-                    messages = finalMessages,
+                    messagesPerPersona = finalMap,
                     isGenerating = false
                 )
             } catch (e: Exception) {
@@ -129,11 +156,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     text = "Sorry, I encountered an error: ${e.message}",
                     sender = MessageSender.AI
                 )
-                val finalMessages = _uiState.value.messages.map { msg ->
+                val activeList = _uiState.value.messagesPerPersona[persona.id] ?: emptyList()
+                val finalMessages = activeList.map { msg ->
                     if (msg.id == pendingAiMessage.id) errorMessage else msg
                 }
+                val finalMap = _uiState.value.messagesPerPersona.toMutableMap()
+                finalMap[persona.id] = finalMessages
+
                 _uiState.value = _uiState.value.copy(
-                    messages = finalMessages,
+                    messagesPerPersona = finalMap,
                     isGenerating = false
                 )
             }
@@ -153,8 +184,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearChat() {
+        val persona = _uiState.value.selectedPersona ?: return
+        val updatedMap = _uiState.value.messagesPerPersona.toMutableMap()
+        updatedMap[persona.id] = listOf(
+            ChatMessage(text = persona.welcomeMessage, sender = MessageSender.AI)
+        )
         _uiState.value = _uiState.value.copy(
-            messages = listOf(INITIAL_WELCOME_MESSAGE),
+            messagesPerPersona = updatedMap,
             inputText = "",
             isGenerating = false
         )

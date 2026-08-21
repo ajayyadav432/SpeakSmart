@@ -29,19 +29,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Psychology
-
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.speaksmart.data.AiAgentPersona
 import com.example.speaksmart.data.ChatMessage
 import com.example.speaksmart.data.MessageSender
 import com.example.speaksmart.theme.*
@@ -105,10 +113,10 @@ fun ChatScreen(
         }
     }
 
-    // Auto scroll list when new messages arrive
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+    // Auto scroll message list
+    LaunchedEffect(uiState.currentMessages.size) {
+        if (uiState.currentMessages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.currentMessages.size - 1)
         }
     }
 
@@ -124,7 +132,7 @@ fun ChatScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = SurfaceDark,
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -136,59 +144,195 @@ fun ChatScreen(
                             SurfaceDark,
                         )
                     )
-                ),
+                )
         ) {
-            // Chat Top Bar
-            ChatTopBar(
-                isModelLoaded = uiState.isModelLoaded,
-                onClearChat = { viewModel.clearChat() }
-            )
+            val selectedPersona = uiState.selectedPersona
 
-            // Suggestion Chips
-            SuggestionChipsRow(
-                onChipSelected = { suggestion ->
-                    viewModel.sendMessage(suggestion)
-                }
-            )
+            if (selectedPersona == null) {
+                // Agent Selection Screen
+                AgentSelectionGrid(
+                    personas = AiAgentPersona.ALL_PERSONAS,
+                    onSelectPersona = { persona ->
+                        viewModel.selectPersona(persona)
+                    }
+                )
+            } else {
+                // Active Agent Chat Screen
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Chat Top Bar with Persona Info & Switch Agent action
+                    ChatTopBar(
+                        persona = selectedPersona,
+                        isModelLoaded = uiState.isModelLoaded,
+                        onSwitchPersona = { viewModel.switchPersona() },
+                        onClearChat = { viewModel.clearChat() }
+                    )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                    // Persona Suggestion Chips
+                    SuggestionChipsRow(
+                        suggestions = selectedPersona.suggestionChips,
+                        onChipSelected = { suggestion ->
+                            viewModel.sendMessage(suggestion)
+                        }
+                    )
 
-            // Chat Messages List
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 12.dp)
-            ) {
-                items(
-                    items = uiState.messages,
-                    key = { it.id }
-                ) { message ->
-                    ChatMessageItem(message = message)
-                }
-            }
+                    Spacer(modifier = Modifier.height(8.dp))
 
-            // Input Bar
-            ChatInputBar(
-                inputText = uiState.inputText,
-                isGenerating = uiState.isGenerating,
-                isListening = uiState.isListening,
-                onTextChanged = { viewModel.updateInputText(it) },
-                onSendClicked = { viewModel.sendMessage() },
-                onMicClicked = {
-                    if (uiState.isListening) {
-                        viewModel.stopListening()
-                    } else {
-                        if (hasAudioPermission) {
-                            viewModel.startListening()
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    // Chat Messages List
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 12.dp)
+                    ) {
+                        items(
+                            items = uiState.currentMessages,
+                            key = { it.id }
+                        ) { message ->
+                            ChatMessageItem(message = message, persona = selectedPersona)
                         }
                     }
+
+                    // Input Bar
+                    ChatInputBar(
+                        inputText = uiState.inputText,
+                        isGenerating = uiState.isGenerating,
+                        isListening = uiState.isListening,
+                        onTextChanged = { viewModel.updateInputText(it) },
+                        onSendClicked = { viewModel.sendMessage() },
+                        onMicClicked = {
+                            if (uiState.isListening) {
+                                viewModel.stopListening()
+                            } else {
+                                if (hasAudioPermission) {
+                                    viewModel.startListening()
+                                } else {
+                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        }
+                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentSelectionGrid(
+    personas: List<AiAgentPersona>,
+    onSelectPersona: (AiAgentPersona) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        Column {
+            Text(
+                text = "Choose Your AI Agent",
+                style = MaterialTheme.typography.headlineMedium,
+                color = OnSurfaceDark,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Select a specialized AI Persona to begin your private chat session",
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceVariantDark,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(1),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(personas) { persona ->
+                AgentCard(
+                    persona = persona,
+                    onSelect = { onSelectPersona(persona) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentCard(
+    persona: AiAgentPersona,
+    onSelect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable { onSelect() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCardDark),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon box with persona accent color
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(persona.accentColor.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = persona.icon,
+                    contentDescription = null,
+                    tint = persona.accentColor,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = persona.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OnSurfaceDark,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Text(
+                    text = persona.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = persona.accentColor,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = persona.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceVariantDark,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Start Chat",
+                tint = persona.accentColor,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -196,49 +340,56 @@ fun ChatScreen(
 
 @Composable
 private fun ChatTopBar(
+    persona: AiAgentPersona,
     isModelLoaded: Boolean,
+    onSwitchPersona: () -> Unit,
     onClearChat: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
-                    .background(PrimaryDark.copy(alpha = 0.2f)),
+                    .background(persona.accentColor.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.Psychology,
+                    imageVector = persona.icon,
                     contentDescription = null,
-                    tint = PrimaryDark,
-                    modifier = Modifier.size(24.dp)
+                    tint = persona.accentColor,
+                    modifier = Modifier.size(22.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "SpeakSmart AI Chat",
-                    style = MaterialTheme.typography.titleLarge,
+                    text = persona.title,
+                    style = MaterialTheme.typography.titleMedium,
                     color = OnSurfaceDark,
                     fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = if (isModelLoaded) Icons.Outlined.CloudQueue else Icons.Outlined.CloudOff,
                         contentDescription = null,
-                        tint = if (isModelLoaded) SuccessGreen else CorrectionSectionColor,
-                        modifier = Modifier.size(14.dp)
+                        tint = if (isModelLoaded) SuccessGreen else persona.accentColor,
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isModelLoaded) "On-Device Gemma 2B LLM" else "Rule AI Tutor Active",
+                        text = if (isModelLoaded) "Gemma 2B LLM Active" else "Smart Rule Agent Active",
                         style = MaterialTheme.typography.bodySmall,
                         color = OnSurfaceVariantDark,
                         fontSize = 11.sp,
@@ -247,28 +398,31 @@ private fun ChatTopBar(
             }
         }
 
-        IconButton(onClick = onClearChat) {
-            Icon(
-                imageVector = Icons.Default.DeleteSweep,
-                contentDescription = "Clear Chat",
-                tint = OnSurfaceVariantDark
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Switch Agent button
+            IconButton(onClick = onSwitchPersona) {
+                Icon(
+                    imageVector = Icons.Default.Apps,
+                    contentDescription = "Switch Agent Persona",
+                    tint = persona.accentColor
+                )
+            }
+            IconButton(onClick = onClearChat) {
+                Icon(
+                    imageVector = Icons.Default.DeleteSweep,
+                    contentDescription = "Clear Chat",
+                    tint = OnSurfaceVariantDark
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun SuggestionChipsRow(
+    suggestions: List<String>,
     onChipSelected: (String) -> Unit
 ) {
-    val suggestions = listOf(
-        "💡 Explain 'affect' vs 'effect'",
-        "🎓 Give me a 3-question English quiz",
-        "💼 Practice job interview questions",
-        "📚 Explain Present Perfect Tense",
-        "✨ Give me 3 synonyms for 'excellent'"
-    )
-
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -296,7 +450,10 @@ private fun SuggestionChipsRow(
 }
 
 @Composable
-private fun ChatMessageItem(message: ChatMessage) {
+private fun ChatMessageItem(
+    message: ChatMessage,
+    persona: AiAgentPersona
+) {
     val isUser = message.sender == MessageSender.USER
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val formattedTime = remember(message.timestamp) { timeFormat.format(Date(message.timestamp)) }
@@ -311,13 +468,13 @@ private fun ChatMessageItem(message: ChatMessage) {
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(CorrectionSectionColor.copy(alpha = 0.2f)),
+                    .background(persona.accentColor.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+                    imageVector = persona.icon,
                     contentDescription = null,
-                    tint = CorrectionSectionColor,
+                    tint = persona.accentColor,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -352,7 +509,7 @@ private fun ChatMessageItem(message: ChatMessage) {
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 if (message.isPending) {
-                    TypingDotsIndicator()
+                    TypingDotsIndicator(accentColor = persona.accentColor)
                 } else {
                     Text(
                         text = message.text,
@@ -376,7 +533,7 @@ private fun ChatMessageItem(message: ChatMessage) {
 }
 
 @Composable
-private fun TypingDotsIndicator() {
+private fun TypingDotsIndicator(accentColor: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "typing_dots")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -395,14 +552,14 @@ private fun TypingDotsIndicator() {
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(14.dp),
-            color = CorrectionSectionColor,
+            color = accentColor,
             strokeWidth = 2.dp
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = "SpeakSmart AI is thinking...",
+            text = "AI Agent is thinking...",
             style = MaterialTheme.typography.bodySmall,
-            color = CorrectionSectionColor.copy(alpha = alpha),
+            color = accentColor.copy(alpha = alpha),
             fontWeight = FontWeight.SemiBold,
             fontSize = 12.sp
         )
@@ -453,7 +610,7 @@ private fun ChatInputBar(
                 onValueChange = onTextChanged,
                 placeholder = {
                     Text(
-                        text = if (isListening) "Listening..." else "Ask SpeakSmart AI anything...",
+                        text = if (isListening) "Listening..." else "Type message or ask anything...",
                         color = OnSurfaceMutedDark,
                         fontSize = 14.sp
                     )

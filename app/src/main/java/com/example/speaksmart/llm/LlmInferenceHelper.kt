@@ -242,130 +242,316 @@ class LlmInferenceHelper(private val context: Context) {
     }
 
     /**
-     * Generate direct LLM chat response for user's question or conversation.
+     * Generate direct LLM chat response for user's question or conversation using selected Agent Persona.
      */
     suspend fun generateChatResponse(
         userPrompt: String,
-        history: List<Pair<String, String>> = emptyList()
+        history: List<Pair<String, String>> = emptyList(),
+        persona: com.example.speaksmart.data.AiAgentPersona = com.example.speaksmart.data.AiAgentPersona.ENGLISH_COACH
     ): String = withContext(Dispatchers.IO) {
         if (!isInitialized || llmInference == null) {
-            return@withContext generateFallbackChatResponse(userPrompt)
+            return@withContext generateFallbackChatResponse(userPrompt, persona)
         }
 
         try {
             val promptBuilder = StringBuilder()
-            promptBuilder.appendLine(CHAT_SYSTEM_PROMPT)
+            promptBuilder.appendLine(persona.systemPrompt)
             promptBuilder.appendLine()
             for ((userMsg, aiMsg) in history.takeLast(4)) {
                 promptBuilder.appendLine("User: $userMsg")
-                promptBuilder.appendLine("SpeakSmart AI: $aiMsg")
+                promptBuilder.appendLine("${persona.title}: $aiMsg")
             }
             promptBuilder.appendLine("User: $userPrompt")
-            promptBuilder.appendLine("SpeakSmart AI:")
+            promptBuilder.appendLine("${persona.title}:")
 
             val response = llmInference!!.generateResponse(promptBuilder.toString())
             response.trim().ifEmpty {
-                generateFallbackChatResponse(userPrompt)
+                generateFallbackChatResponse(userPrompt, persona)
             }
         } catch (e: Exception) {
             Log.e(TAG, "LLM chat generation failed: ${e.message}", e)
-            generateFallbackChatResponse(userPrompt)
+            generateFallbackChatResponse(userPrompt, persona)
         }
     }
 
     /**
-     * Intelligent English Tutor fallback for direct LLM Chat queries.
+     * Intelligent AI Agent fallback for direct LLM Chat queries across all 6 specialized personas.
      */
-    private fun generateFallbackChatResponse(prompt: String): String {
+    private fun generateFallbackChatResponse(
+        prompt: String,
+        persona: com.example.speaksmart.data.AiAgentPersona
+    ): String {
         val lower = prompt.lowercase().trim()
 
-        return when {
-            lower.contains("affect") && lower.contains("effect") -> {
-                """
-                ✨ **Affect vs. Effect**
-                
-                • **Affect** (usually a verb): Means to influence or produce a change.
-                  *Example:* "The noise affects my concentration."
-                
-                • **Effect** (usually a noun): Means the result or outcome.
-                  *Example:* "The rule change had a positive effect."
-                
-                💡 *Quick Memory Tip:* **A**ffect = **A**ction (Verb), **E**ffect = **E**nd result (Noun)!
-                """.trimIndent()
+        return when (persona.id) {
+            "deep_reflection" -> {
+                when {
+                    lower.contains("anxious") || lower.contains("reframe") || lower.contains("worry") -> {
+                        """
+                        🌿 **Cognitive Reframing Thought Record**
+                        
+                        1. **Identify the Core Thought**: What exact situation triggered this anxiety?
+                        2. **Examine Evidence**: Is this thought 100% factually true, or is your mind catastrophizing?
+                        3. **Balanced Reframe**: *"I am facing a challenge, but I have navigated difficult situations before, and I can handle this step-by-step."*
+                        
+                        💭 *Reflective Question for you:* What is one small element of this situation that remains fully within your control today?
+                        """.trimIndent()
+                    }
+                    lower.contains("journal") || lower.contains("5-minute") || lower.contains("reflect") -> {
+                        """
+                        📝 **5-Minute Reflection Journal Prompt**
+                        
+                        Take a quiet breath and answer these 3 quick reflections:
+                        
+                        1. **Current State:** What emotion is currently present in your body (e.g., tension, calmness, fatigue)?
+                        2. **Gratitude:** What is one simple thing that brought you comfort or ease today?
+                        3. **Intention:** What is one gentle goal for the rest of your day?
+                        
+                        *Feel free to write your answers right here when you're ready.*
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        🌿 **Deep Reflection Response**
+                        
+                        Thank you for sharing your thoughts: "$prompt"
+                        
+                        Remember that emotions are temporary signals, not permanent truths. Giving yourself space to write and process thoughts without judgment is a powerful step for mental clarity.
+                        
+                        Would you like to explore what emotions lie beneath this thought, or try a 2-minute grounding exercise together?
+                        """.trimIndent()
+                    }
+                }
             }
-            lower.contains("present perfect") || lower.contains("have done") || lower.contains("has done") -> {
-                """
-                📚 **Present Perfect Tense Guide**
-                
-                • **Formula:** `Subject + have/has + Past Participle (V3)`
-                • **Usage:** Connects a past action with the present moment.
-                
-                Examples:
-                1. "I **have lived** in Tokyo for 3 years." (I still live there)
-                2. "She **has finished** her homework." (It's completed now)
-                
-                💡 *Compare:* "I lived in Tokyo" (Simple Past - action ended in past).
-                """.trimIndent()
+            "deal_coach" -> {
+                when {
+                    lower.contains("price") || lower.contains("expensive") || lower.contains("objection") -> {
+                        """
+                        💼 **Price Objection Defense Strategy**
+                        
+                        1. **Acknowledge without conceding**: *"I understand budget constraints are top of mind for your team."*
+                        2. **Pivot from Price to ROI**: *"Let's examine the risk of non-action versus the projected 3.5x ROI our solution delivers."*
+                        3. **Isolate the Objection**: *"If we can demonstrate clear payback within 90 days, are there any other obstacles to closing this deal today?"*
+                        
+                        🎯 *Next Action:* Never discount without receiving a scope trade-off in return!
+                        """.trimIndent()
+                    }
+                    lower.contains("contract") || lower.contains("clause") || lower.contains("risk") -> {
+                        """
+                        📜 **Contract Negotiation Playbook**
+                        
+                        Key focus areas for commercial agreements:
+                        • **Limitation of Liability**: Cap liability to 12 months of fees paid.
+                        • **Termination for Convenience**: Require 30-60 days written notice with non-refundable deposit.
+                        • **Payment Terms**: Net 30 with automatic late interest penalty.
+                        
+                        💡 *Tactical Tip:* Keep your core IP and indemnity clauses unyielding; negotiate on payment schedules or SLA response windows instead.
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        💼 **Confidential Deal Coach Strategy**
+                        
+                        Re: "$prompt"
+                        
+                        In deal closing and negotiation, leverage comes from:
+                        1. **Clear Alternatives (BATNA)**: Know your walkaway threshold before entering the conversation.
+                        2. **Silence & Anchoring**: Let the opposing party make the first concession after you set your term anchor.
+                        3. **Value Alignment**: Tie every feature directly to their top strategic KPI.
+                        
+                        What specific terms or timeline objections are you facing from their decision maker?
+                        """.trimIndent()
+                    }
+                }
             }
-            lower.contains("quiz") || lower.contains("test me") || lower.contains("question") -> {
-                """
-                🎓 **English Practice Quiz**
-                
-                **Question 1:**
-                Choose the correct sentence:
-                A) She don't like coffee.
-                B) She doesn't like coffee.
-                C) She not like coffee.
-                
-                **Question 2:**
-                What is a synonym for 'meticulous'?
-                A) Careless
-                B) Detailed and careful
-                C) Fast
-                
-                *Reply with your answers (e.g., '1B, 2B') and I will grade them for you!*
-                """.trimIndent()
+            "financial_auditor" -> {
+                when {
+                    lower.contains("50/30/20") || lower.contains("budget") || lower.contains("analyze") -> {
+                        """
+                        📊 **Hyper-Private Budget Audit (50/30/20 Rule)**
+                        
+                        • **50% Needs**: Essential living expenses (Rent, Utilities, Groceries, Minimum Debt).
+                        • **30% Wants**: Lifestyle, Dining out, Entertainment, Subscriptions.
+                        • **20% Savings & Debt Acceleration**: High-yield savings, Investments, Debt payoff.
+                        
+                        💡 *Audit Tip:* If your Needs exceed 50%, audit fixed monthly contracts (insurance, internet, utility plans) before cutting essential quality-of-life needs.
+                        """.trimIndent()
+                    }
+                    lower.contains("debt") || lower.contains("snowball") || lower.contains("avalanche") -> {
+                        """
+                        📉 **Debt Payoff Optimization**
+                        
+                        • **Avalanche Method (Mathematically Optimal)**: Pay off highest interest rate balance first (saves the most money).
+                        • **Snowball Method (Psychologically Rewarding)**: Pay off smallest total balance first (builds quick momentum).
+                        
+                        🛡️ *Auditor Recommendation:* Maintain a $1,000 mini emergency reserve first so unexpected repairs don't push you back onto credit cards!
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        📊 **Financial Audit Report**
+                        
+                        Analysis for: "$prompt"
+                        
+                        To maintain financial health and privacy:
+                        1. **Track Cash Flow Leakage**: Audit small recurring subscriptions and recurring automated charges.
+                        2. **Automate Savings**: Move 15-20% of net income to high-yield accounts on payday before discretionary spending.
+                        3. **Asset Protection**: Keep 3 to 6 months of living expenses liquid in FDIC-insured high-yield savings.
+                        """.trimIndent()
+                    }
+                }
             }
-            lower.contains("interview") || lower.contains("job") || lower.contains("work") -> {
-                """
-                💼 **Job Interview Practice**
-                
-                Great choice! Let's practice key interview questions in English.
-                
-                **Question for you:**
-                *"Could you introduce yourself and describe one of your key professional strengths?"*
-                
-                💡 *Tutor Tip:* Use the **STAR** method (Situation, Task, Action, Result) when giving examples!
-                
-                Go ahead and type your response—I'll review your grammar and word choices!
-                """.trimIndent()
+            "second_brain" -> {
+                when {
+                    lower.contains("clean") || lower.contains("micro") || lower.contains("break down") -> {
+                        """
+                        🧠 **Executive Function Micro-Task Breakdown**
+                        
+                        Let's break down this task so you don't feel overwhelmed:
+                        
+                        1. 🟢 **Step 1 (30 secs):** Walk over and pick up 3 pieces of trash on the floor.
+                        2. 🟡 **Step 2 (2 mins):** Put all dirty clothes into a laundry hamper.
+                        3. 🔵 **Step 3 (2 mins):** Clear only the surface of your desk or bed.
+                        
+                        ⚡ *Rule:* Stop right after Step 1 if you want to! Starting is the only win we care about today.
+                        """.trimIndent()
+                    }
+                    lower.contains("stuck") || lower.contains("paralysis") || lower.contains("start") -> {
+                        """
+                        ⚡ **ADHD Task Paralysis Emergency Protocol**
+                        
+                        1. **Lower the Bar to Zero:** Tell yourself: *"I am only going to work on this for 120 seconds."*
+                        2. **Change Physical Location:** Stand up, stretch your arms, or grab a glass of cold water.
+                        3. **Body Doubling:** Keep me open while you do the first 2 minutes.
+                        
+                        Ready? Set a timer for 2 minutes right now and do the smallest possible action!
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        🧠 **Second Brain Task Organizer**
+                        
+                        Re: "$prompt"
+                        
+                        When your brain feels full or stuck:
+                        1. **Brain Dump:** Get all open loops out of your head onto screen/paper.
+                        2. **Pick ONE Priority:** Hide everything else from view.
+                        3. **Time-box:** Work in 15-minute sprints with guaranteed rest breaks.
+                        
+                        What is the ONE smallest action step you can take in the next 5 minutes?
+                        """.trimIndent()
+                    }
+                }
             }
-            lower.contains("hi") || lower.contains("hello") || lower.contains("hey") -> {
-                """
-                Hello! 👋 I'm your SpeakSmart AI Tutor.
-                
-                How can I help your English today? You can:
-                • Ask any grammar or vocabulary question
-                • Practice conversational topics
-                • Ask for a mini-quiz or interview practice
-                """.trimIndent()
+            "travel_translator" -> {
+                when {
+                    lower.contains("japan") || lower.contains("food") || lower.contains("phrases") -> {
+                        """
+                        ✈️ **Japan Dining & Etiquette Quick Guide**
+                        
+                        **Essential Phrases:**
+                        • *"Sumimasen"* (soo-mee-mah-sen) - Excuse me / Sorry
+                        • *"Arigatou gozaimasu"* (ah-ree-gah-toe go-zah-ee-mah-soo) - Thank you very much
+                        • *"O-kaikei o onegai shimasu"* (oh-kye-kay oh oh-nay-gai she-mah-soo) - Check/bill please
+                        
+                        🌸 **Cultural Tip:** Never stick your chopsticks vertically into a bowl of rice (it is associated with funeral rites). Rest them on the chopstick holder (*hashi-oki*).
+                        """.trimIndent()
+                    }
+                    lower.contains("emergency") || lower.contains("spanish") || lower.contains("french") -> {
+                        """
+                        🚨 **Emergency Travel Phrases**
+                        
+                        **Spanish:**
+                        • *"¡Necesito ayuda!"* (Neh-seh-SEE-toh ah-YOO-dah) - I need help!
+                        • *"¿Dónde está el hospital?"* (DON-deh ess-TAH el oss-pee-TAL) - Where is the hospital?
+                        
+                        **French:**
+                        • *"Au secours !"* (Oh suh-KOOR) - Help!
+                        • *"Où sont les toilettes ?"* (Oo son lay twah-LETT) - Where is the restroom?
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        ✈️ **Off-Grid Cultural Guide**
+                        
+                        Query: "$prompt"
+                        
+                        **Universal Travel Rules:**
+                        1. Learn basic greeting and gratitude phrases in the local language—locals deeply appreciate the effort.
+                        2. Respect dress codes at religious or sacred sites (shoulder & knee coverage).
+                        3. Keep offline maps and localized currency conversion notes saved on device.
+                        
+                        Where are you traveling next, or what specific phrase do you need translated?
+                        """.trimIndent()
+                    }
+                }
             }
             else -> {
-                """
-                🤖 **SpeakSmart AI Answer**
-                
-                Thank you for your question: "$prompt"
-                
-                When learning English, pay attention to:
-                1. **Sentence Structure**: Keep subjects and verbs in agreement.
-                2. **Vocabulary**: Expand your expressions using descriptive adjectives and precise verbs.
-                3. **Active Practice**: Regular speaking and writing build lasting fluency!
-                
-                Feel free to ask me to explain specific words, correct a sentence, or quiz your knowledge!
-                """.trimIndent()
+                // English Coach
+                when {
+                    lower.contains("affect") && lower.contains("effect") -> {
+                        """
+                        ✨ **Affect vs. Effect**
+                        
+                        • **Affect** (usually a verb): Means to influence or produce a change.
+                          *Example:* "The noise affects my concentration."
+                        
+                        • **Effect** (usually a noun): Means the result or outcome.
+                          *Example:* "The rule change had a positive effect."
+                        
+                        💡 *Quick Memory Tip:* **A**ffect = **A**ction (Verb), **E**ffect = **E**nd result (Noun)!
+                        """.trimIndent()
+                    }
+                    lower.contains("present perfect") || lower.contains("have done") || lower.contains("has done") -> {
+                        """
+                        📚 **Present Perfect Tense Guide**
+                        
+                        • **Formula:** `Subject + have/has + Past Participle (V3)`
+                        • **Usage:** Connects a past action with the present moment.
+                        
+                        Examples:
+                        1. "I **have lived** in Tokyo for 3 years." (I still live there)
+                        2. "She **has finished** her homework." (It's completed now)
+                        
+                        💡 *Compare:* "I lived in Tokyo" (Simple Past - action ended in past).
+                        """.trimIndent()
+                    }
+                    lower.contains("quiz") || lower.contains("test me") || lower.contains("question") -> {
+                        """
+                        🎓 **English Practice Quiz**
+                        
+                        **Question 1:**
+                        Choose the correct sentence:
+                        A) She don't like coffee.
+                        B) She doesn't like coffee.
+                        C) She not like coffee.
+                        
+                        **Question 2:**
+                        What is a synonym for 'meticulous'?
+                        A) Careless
+                        B) Detailed and careful
+                        C) Fast
+                        
+                        *Reply with your answers (e.g., '1B, 2B') and I will grade them for you!*
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        🤖 **English Improvement Coach**
+                        
+                        Thank you for your question: "$prompt"
+                        
+                        When practicing English, focus on:
+                        1. **Sentence Structure**: Clear subject-verb agreement.
+                        2. **Vocabulary Expansion**: Use vivid adjectives and precise verbs.
+                        3. **Consistency**: Daily practice builds natural fluency.
+                        """.trimIndent()
+                    }
+                }
             }
         }
     }
+
 
     fun close() {
         try {
