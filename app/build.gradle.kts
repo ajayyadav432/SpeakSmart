@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "com.example.speaksmart"
+    namespace = "com.crispr.ai"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.speaksmart"
+        applicationId = "com.crispr.ai"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
