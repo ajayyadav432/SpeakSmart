@@ -30,6 +30,9 @@ class LlmInferenceHelper(private val context: Context) {
 
         // System prompt for the English tutor
         const val SYSTEM_PROMPT = """You are a private English tutor. Analyze the following transcribed text. Identify any grammatical errors, suggest better vocabulary, and generate one short multiple-choice quiz question to help the user improve based on their mistakes. Output only the corrections and the quiz."""
+
+        // System prompt for direct Chat
+        const val CHAT_SYSTEM_PROMPT = """You are SpeakSmart AI, an expert, encouraging, and friendly English Language Tutor. Answer the user's questions about English grammar, vocabulary, pronunciation, idioms, sentence structure, or general conversation practice concisely, accurately, and helpful for language learners."""
     }
 
     private var llmInference: LlmInference? = null
@@ -48,19 +51,28 @@ class LlmInferenceHelper(private val context: Context) {
             return@withContext false
         }
 
-        try {
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelPath)
-                .build()
+        // Try GPU backend first, fallback to CPU backend (for emulators without OpenCL support)
+        val backendsToTry = listOf(LlmInference.Backend.GPU, LlmInference.Backend.CPU)
 
-            llmInference = LlmInference.createFromOptions(context, options)
-            isInitialized = true
-            Log.i(TAG, "LLM initialized successfully with model: $modelPath")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize LLM: ${e.message}", e)
-            false
+        for (backend in backendsToTry) {
+            try {
+                Log.d(TAG, "Attempting LLM initialization with backend: $backend")
+                val options = LlmInference.LlmInferenceOptions.builder()
+                    .setModelPath(modelPath)
+                    .setPreferredBackend(backend)
+                    .build()
+
+                llmInference = LlmInference.createFromOptions(context, options)
+                isInitialized = true
+                Log.i(TAG, "LLM initialized successfully with backend $backend and model: $modelPath")
+                return@withContext true
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed initialization with backend $backend: ${e.message}")
+            }
         }
+
+        Log.e(TAG, "Failed to initialize LLM with all backends for model: $modelPath")
+        false
     }
 
     /**
@@ -229,6 +241,132 @@ class LlmInferenceHelper(private val context: Context) {
         return sb.toString()
     }
 
+    /**
+     * Generate direct LLM chat response for user's question or conversation.
+     */
+    suspend fun generateChatResponse(
+        userPrompt: String,
+        history: List<Pair<String, String>> = emptyList()
+    ): String = withContext(Dispatchers.IO) {
+        if (!isInitialized || llmInference == null) {
+            return@withContext generateFallbackChatResponse(userPrompt)
+        }
+
+        try {
+            val promptBuilder = StringBuilder()
+            promptBuilder.appendLine(CHAT_SYSTEM_PROMPT)
+            promptBuilder.appendLine()
+            for ((userMsg, aiMsg) in history.takeLast(4)) {
+                promptBuilder.appendLine("User: $userMsg")
+                promptBuilder.appendLine("SpeakSmart AI: $aiMsg")
+            }
+            promptBuilder.appendLine("User: $userPrompt")
+            promptBuilder.appendLine("SpeakSmart AI:")
+
+            val response = llmInference!!.generateResponse(promptBuilder.toString())
+            response.trim().ifEmpty {
+                generateFallbackChatResponse(userPrompt)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "LLM chat generation failed: ${e.message}", e)
+            generateFallbackChatResponse(userPrompt)
+        }
+    }
+
+    /**
+     * Intelligent English Tutor fallback for direct LLM Chat queries.
+     */
+    private fun generateFallbackChatResponse(prompt: String): String {
+        val lower = prompt.lowercase().trim()
+
+        return when {
+            lower.contains("affect") && lower.contains("effect") -> {
+                """
+                ✨ **Affect vs. Effect**
+                
+                • **Affect** (usually a verb): Means to influence or produce a change.
+                  *Example:* "The noise affects my concentration."
+                
+                • **Effect** (usually a noun): Means the result or outcome.
+                  *Example:* "The rule change had a positive effect."
+                
+                💡 *Quick Memory Tip:* **A**ffect = **A**ction (Verb), **E**ffect = **E**nd result (Noun)!
+                """.trimIndent()
+            }
+            lower.contains("present perfect") || lower.contains("have done") || lower.contains("has done") -> {
+                """
+                📚 **Present Perfect Tense Guide**
+                
+                • **Formula:** `Subject + have/has + Past Participle (V3)`
+                • **Usage:** Connects a past action with the present moment.
+                
+                Examples:
+                1. "I **have lived** in Tokyo for 3 years." (I still live there)
+                2. "She **has finished** her homework." (It's completed now)
+                
+                💡 *Compare:* "I lived in Tokyo" (Simple Past - action ended in past).
+                """.trimIndent()
+            }
+            lower.contains("quiz") || lower.contains("test me") || lower.contains("question") -> {
+                """
+                🎓 **English Practice Quiz**
+                
+                **Question 1:**
+                Choose the correct sentence:
+                A) She don't like coffee.
+                B) She doesn't like coffee.
+                C) She not like coffee.
+                
+                **Question 2:**
+                What is a synonym for 'meticulous'?
+                A) Careless
+                B) Detailed and careful
+                C) Fast
+                
+                *Reply with your answers (e.g., '1B, 2B') and I will grade them for you!*
+                """.trimIndent()
+            }
+            lower.contains("interview") || lower.contains("job") || lower.contains("work") -> {
+                """
+                💼 **Job Interview Practice**
+                
+                Great choice! Let's practice key interview questions in English.
+                
+                **Question for you:**
+                *"Could you introduce yourself and describe one of your key professional strengths?"*
+                
+                💡 *Tutor Tip:* Use the **STAR** method (Situation, Task, Action, Result) when giving examples!
+                
+                Go ahead and type your response—I'll review your grammar and word choices!
+                """.trimIndent()
+            }
+            lower.contains("hi") || lower.contains("hello") || lower.contains("hey") -> {
+                """
+                Hello! 👋 I'm your SpeakSmart AI Tutor.
+                
+                How can I help your English today? You can:
+                • Ask any grammar or vocabulary question
+                • Practice conversational topics
+                • Ask for a mini-quiz or interview practice
+                """.trimIndent()
+            }
+            else -> {
+                """
+                🤖 **SpeakSmart AI Answer**
+                
+                Thank you for your question: "$prompt"
+                
+                When learning English, pay attention to:
+                1. **Sentence Structure**: Keep subjects and verbs in agreement.
+                2. **Vocabulary**: Expand your expressions using descriptive adjectives and precise verbs.
+                3. **Active Practice**: Regular speaking and writing build lasting fluency!
+                
+                Feel free to ask me to explain specific words, correct a sentence, or quiz your knowledge!
+                """.trimIndent()
+            }
+        }
+    }
+
     fun close() {
         try {
             llmInference?.close()
@@ -241,3 +379,4 @@ class LlmInferenceHelper(private val context: Context) {
 
     fun isModelLoaded(): Boolean = isInitialized
 }
+

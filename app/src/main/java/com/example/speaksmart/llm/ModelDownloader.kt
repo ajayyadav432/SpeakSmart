@@ -24,9 +24,9 @@ class ModelDownloader(private val context: Context) {
     companion object {
         private const val TAG = "ModelDownloader"
 
-        // Qwen 2.5 1.5B Instruct GPU quantized model URL for MediaPipe LLM Inference
+        // Gemma 2B GPU quantized model URL for MediaPipe LLM Inference
         const val DEFAULT_MODEL_URL =
-            "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct-gpu-int4/resolve/main/model.bin"
+            "https://huggingface.co/alexdlov/gemma-2b-it-gpu-int4.bin/resolve/main/gemma-2b-it-gpu-int4.bin"
 
         fun getModelFile(context: Context): File {
             val dir = File(context.filesDir, "llm")
@@ -56,15 +56,37 @@ class ModelDownloader(private val context: Context) {
             Log.d(TAG, "Starting download from: $urlStr")
             _status.value = DownloadStatus.Downloading(0f, 0L, -1L)
 
-            val url = URL(urlStr)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
-            connection.instanceFollowRedirects = true
-            connection.connect()
+            var currentUrlStr = urlStr
+            var connection: HttpURLConnection
+            var responseCode: Int
+            var redirectCount = 0
 
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                val err = "Server returned HTTP ${connection.responseCode}: ${connection.responseMessage}"
+            while (true) {
+                val url = URL(currentUrlStr)
+                connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 30000
+                connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+                connection.connect()
+
+                responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                    responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    responseCode == 307 || responseCode == 308) {
+                    val newUrl = connection.getHeaderField("Location")
+                    if (newUrl != null && redirectCount < 10) {
+                        currentUrlStr = newUrl
+                        redirectCount++
+                        connection.disconnect()
+                        continue
+                    }
+                }
+                break
+            }
+
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                val err = "Server returned HTTP ${responseCode}: ${connection.responseMessage}"
                 Log.e(TAG, err)
                 _status.value = DownloadStatus.Error(err)
                 return@withContext false
