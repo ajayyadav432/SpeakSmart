@@ -33,6 +33,9 @@ class LlmInferenceHelper(private val context: Context) {
 
         // System prompt for direct Chat
         const val CHAT_SYSTEM_PROMPT = """You are SpeakSmart AI, an expert, encouraging, and friendly English Language Tutor. Answer the user's questions about English grammar, vocabulary, pronunciation, idioms, sentence structure, or general conversation practice concisely, accurately, and helpful for language learners."""
+
+        // System prompt for generic Quick Chat (no persona)
+        const val QUICK_CHAT_SYSTEM_PROMPT = """You are SpeakSmart AI, a helpful, knowledgeable, and friendly AI assistant that runs fully on-device for complete privacy. Answer user questions across any topic — writing, learning, productivity, general knowledge, advice — concisely and helpfully. Never send data externally."""
     }
 
     private var llmInference: LlmInference? = null
@@ -239,6 +242,84 @@ class LlmInferenceHelper(private val context: Context) {
         sb.appendLine("ℹ️ Note: Using built-in analysis. For deeper AI-powered corrections, load a Gemma model to the device.")
 
         return sb.toString()
+    }
+
+    /**
+     * Generate generic quick-chat response (no persona, general purpose AI assistant).
+     */
+    suspend fun generateQuickChatResponse(
+        userPrompt: String,
+        history: List<Pair<String, String>> = emptyList()
+    ): String = withContext(Dispatchers.IO) {
+        if (!isInitialized || llmInference == null) {
+            return@withContext generateFallbackQuickChat(userPrompt)
+        }
+        try {
+            val promptBuilder = StringBuilder()
+            promptBuilder.appendLine(QUICK_CHAT_SYSTEM_PROMPT)
+            promptBuilder.appendLine()
+            for ((userMsg, aiMsg) in history.takeLast(6)) {
+                promptBuilder.appendLine("User: $userMsg")
+                promptBuilder.appendLine("SpeakSmart AI: $aiMsg")
+            }
+            promptBuilder.appendLine("User: $userPrompt")
+            promptBuilder.appendLine("SpeakSmart AI:")
+            val response = llmInference!!.generateResponse(promptBuilder.toString())
+            response.trim().ifEmpty { generateFallbackQuickChat(userPrompt) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Quick chat LLM failed: ${e.message}", e)
+            generateFallbackQuickChat(userPrompt)
+        }
+    }
+
+    private fun generateFallbackQuickChat(prompt: String): String {
+        val lower = prompt.lowercase().trim()
+        return when {
+            lower.contains("hello") || lower.contains("hi") || lower.contains("hey") ->
+                "Hi there! 👋 I'm SpeakSmart AI — your fully private, on-device assistant. Ask me anything! I'm great for writing help, learning, brainstorming, and general knowledge."
+            lower.contains("write") || lower.contains("draft") || lower.contains("email") ->
+                """✍️ **Writing Assistant**
+
+Happy to help you write! For best results, tell me:
+• **Type**: Email / Essay / Message / Cover Letter?
+• **Tone**: Formal, casual, professional, friendly?
+• **Length**: Short, medium, or detailed?
+
+Share your draft or topic and I'll craft it for you!"""
+            lower.contains("summarize") || lower.contains("summary") ->
+                """📋 **Summarization Mode**
+
+Paste the text you'd like summarized and I'll condense it into:
+• A 3-5 bullet point summary
+• Or a short paragraph overview
+
+Your text stays 100% on-device — never sent anywhere!"""
+            lower.contains("brainstorm") || lower.contains("idea") || lower.contains("help me think") ->
+                """💡 **Brainstorm Mode Activated!**
+
+I'm ready to generate ideas with you. Tell me:
+• What topic or problem are you working on?
+• Any constraints (budget, time, audience)?
+
+Let's think through it together!"""
+            lower.contains("who are you") || lower.contains("what can you do") ->
+                """🤖 **About SpeakSmart AI**
+
+I'm a fully on-device AI assistant — meaning:
+• ✅ **Zero internet required** — works offline
+• ✅ **100% private** — no data ever sent externally
+• ✅ **No accounts, no tracking**
+
+I can help with: writing, learning, brainstorming, translation, answering questions, and much more!"""
+            else ->
+                """🤖 **SpeakSmart AI (On-Device)**
+
+Your question: "$prompt"
+
+I'm currently running in **smart fallback mode** (LLM model not loaded). For full AI-powered responses, download the on-device model from the settings.
+
+💡 **Quick Tip:** Even in fallback mode, try asking me about writing, English, brainstorming, or learning topics!"""
+        }
     }
 
     /**
@@ -482,6 +563,95 @@ class LlmInferenceHelper(private val context: Context) {
                         3. Keep offline maps and localized currency conversion notes saved on device.
                         
                         Where are you traveling next, or what specific phrase do you need translated?
+                        """.trimIndent()
+                    }
+                }
+            }
+            "medical_advisor" -> {
+                when {
+                    lower.contains("headache") || lower.contains("head pain") || lower.contains("migraine") -> {
+                        """
+                        🩺 **Understanding Headaches — Educational Overview**
+
+                        Common headache types and potential causes:
+                        • **Tension Headache**: Stress, poor posture, dehydration, eye strain. Most common type.
+                        • **Migraine**: Intense throbbing pain, often with light/sound sensitivity. May last 4–72 hours.
+                        • **Cluster Headache**: Severe pain around one eye, often occurring in cycles.
+
+                        💡 **General Wellness Tips:**
+                        1. Drink 8+ glasses of water daily
+                        2. Take regular screen breaks (20-20-20 rule)
+                        3. Maintain consistent sleep schedules
+
+                        ⚠️ *Seek immediate medical care if headache is sudden, severe (thunderclap), or accompanied by fever, stiff neck, or vision changes.*
+                        """.trimIndent()
+                    }
+                    lower.contains("tired") || lower.contains("fatigue") || lower.contains("exhausted") || lower.contains("no energy") -> {
+                        """
+                        😴 **Understanding Fatigue — Educational Overview**
+
+                        Common causes of persistent tiredness:
+                        • **Sleep Issues**: Inadequate sleep (< 7-9 hrs), sleep apnea, poor sleep quality
+                        • **Nutritional**: Iron deficiency (anemia), low Vitamin D/B12, dehydration
+                        • **Lifestyle**: Sedentary habits, high stress, excessive screen time
+                        • **Medical**: Thyroid disorders, diabetes, or other conditions (requires professional evaluation)
+
+                        💡 **Self-Care Steps to Try:**
+                        1. Prioritize 7-9 hours of consistent sleep
+                        2. Stay hydrated throughout the day
+                        3. Take short daily walks for energy
+
+                        ⚠️ *Consult a doctor if fatigue has persisted for 2+ weeks or is severe.*
+                        """.trimIndent()
+                    }
+                    lower.contains("medication") || lower.contains("medicine") || lower.contains("drug") || lower.contains("interaction") -> {
+                        """
+                        💊 **Medication Safety — Educational Overview**
+
+                        Key principles for safe medication use:
+                        • **Always follow prescribed dosages** — never double-dose or self-medicate
+                        • **Common interaction risk categories:**
+                          - Blood thinners + NSAIDs (e.g., ibuprofen) → bleeding risk
+                          - Antidepressants + certain supplements → serotonin sensitivity
+                          - Antibiotics + alcohol → reduced effectiveness, nausea
+                        • **Ask your pharmacist or doctor** about any new medication before starting it
+
+                        💡 Always keep an updated list of your current medications to share with healthcare providers.
+
+                        ⚠️ *For specific drug interactions, consult a licensed pharmacist or your prescribing physician.*
+                        """.trimIndent()
+                    }
+                    lower.contains("diet") || lower.contains("nutrition") || lower.contains("healthy eating") || lower.contains("food") -> {
+                        """
+                        🥗 **Healthy Eating Foundations**
+
+                        **Balanced Plate Guide:**
+                        • 🥦 **½ Plate**: Non-starchy vegetables (leafy greens, broccoli, peppers)
+                        • 🌾 **¼ Plate**: Whole grains (brown rice, oats, quinoa)
+                        • 🍗 **¼ Plate**: Lean protein (chicken, fish, legumes, tofu)
+                        • 💧 **Hydration**: Aim for 8-10 glasses of water daily
+
+                        **Foods to Limit:**
+                        Ultra-processed foods, sugary drinks, refined carbohydrates, excessive sodium.
+
+                        ⚠️ *For personalized nutrition plans, consult a registered dietitian.*
+                        """.trimIndent()
+                    }
+                    else -> {
+                        """
+                        🏥 **Private Health Advisor — Educational Response**
+
+                        Regarding: "$prompt"
+
+                        As your private health information guide, I can help you:
+                        • Understand general symptoms and their common causes
+                        • Learn about healthy lifestyle habits and wellness practices
+                        • Explain medical terminology in plain language
+                        • Prepare questions to ask your healthcare provider
+
+                        📋 **Remember**: This information is educational, not a substitute for professional medical advice. Your data stays 100% on-device.
+
+                        ⚠️ *Always consult a qualified healthcare professional for diagnosis, treatment, or any specific medical concern.*
                         """.trimIndent()
                     }
                 }
