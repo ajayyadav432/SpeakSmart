@@ -136,15 +136,7 @@ fun ChatScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            SurfaceDark,
-                            SurfaceVariantDark,
-                            SurfaceDark,
-                        )
-                    )
-                )
+                .background(SurfaceDark)
         ) {
             val selectedPersona = uiState.selectedPersona
 
@@ -274,7 +266,7 @@ private fun AgentCard(
             .clickable { onSelect() },
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceCardDark),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
             modifier = Modifier

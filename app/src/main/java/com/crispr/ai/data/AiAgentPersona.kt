@@ -48,7 +48,7 @@ data class AiAgentPersona(
                 "📚 Explain Present Perfect Tense"
             ),
             icon = Icons.Default.School,
-            accentColor = Color(0xFF00BFA5),
+            accentColor = Color(0xFF00E5C8),
             category = AgentCategory.LANGUAGE
         )
 
@@ -66,7 +66,7 @@ data class AiAgentPersona(
                 "💭 I feel overwhelmed by work"
             ),
             icon = Icons.Default.SelfImprovement,
-            accentColor = Color(0xFFBC8CFF),
+            accentColor = Color(0xFFB67CFF),
             category = AgentCategory.WELLNESS
         )
 
@@ -102,7 +102,7 @@ data class AiAgentPersona(
                 "📉 Debt payoff: Snowball vs Avalanche"
             ),
             icon = Icons.Default.AccountBalance,
-            accentColor = Color(0xFF3FB950),
+            accentColor = Color(0xFF3EE68C),
             category = AgentCategory.FINANCE
         )
 
@@ -138,7 +138,7 @@ data class AiAgentPersona(
                 "🗣️ Translate: 'Where is the train station?'"
             ),
             icon = Icons.Default.Explore,
-            accentColor = Color(0xFFFF7043),
+            accentColor = Color(0xFFFF8C42),
             category = AgentCategory.TRAVEL
         )
 
@@ -156,7 +156,7 @@ data class AiAgentPersona(
                 "😴 Why do I feel tired all the time?"
             ),
             icon = Icons.Default.Favorite,
-            accentColor = Color(0xFFEF5350),
+            accentColor = Color(0xFFFF6B6B),
             category = AgentCategory.MEDICAL
         )
 
